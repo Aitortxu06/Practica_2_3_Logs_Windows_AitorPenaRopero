@@ -1,14 +1,18 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Numerics;
 using System.Xml;
+using System.Diagnostics;
 
 namespace ScriptCSVToXML
 {
     class Program
     {
-        static string pathCsv = "../../../NetflixOriginals.csv";
-        static string pathXml = "../../../NetflixOriginals.xml";
+        static string pathCsv = "NetflixOriginals.csv";
+        static string pathXml = "NetflixOriginals.xml";
 
+        static Logger logger = new Logger();
 
         static void Main(string[] args)
         {
@@ -93,7 +97,7 @@ namespace ScriptCSVToXML
             //El usuario comprueba si el archivo origen existe antes de seguir  
             if (!File.Exists(rutaOrigen))
             {
-                Console.WriteLine($"\n[ERROR] No se encuentra el archivo de origen: {rutaOrigen}");
+                logger.LogError($"No se encuentra el archivo de origen: {rutaOrigen}");
                 return;
             }
 
@@ -104,7 +108,7 @@ namespace ScriptCSVToXML
                 Console.WriteLine($"     EXPORTAR {origenFormato} a {((origenFormato == "CSV") ? "XML" : "CSV")}");
                 Console.WriteLine("====================================");
                 //Muestro la 4 opciones de exportación
-                Console.WriteLine($"1. Exportar todo el documento:");
+                Console.WriteLine($"1. Exportar todo el documento");
                 Console.WriteLine($"2. Exportar por género");
                 Console.WriteLine($"3. Exportar por año");
                 Console.WriteLine($"4. Exportar por lenguaje");
@@ -140,7 +144,6 @@ namespace ScriptCSVToXML
                         break;
                 }
             }
-
         }
 
         // Método auxiliar para dividir la línea del CSV considerando comillas dobles
@@ -170,19 +173,21 @@ namespace ScriptCSVToXML
                     // Si el archivo está vacío o solo contiene la línea de cabeceras, cancelamos la exportación
                     if (lineas.Length <= 1)
                     {
-                        Console.WriteLine("\n[AVISO] El archivo CSV está vacío o no contiene datos para exportar.");
+                        logger.LogAviso("El archivo CSV está vacío o no contiene datos para exportar.");
                         return;
                     }
 
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, "Sin filtro (Documento completo)", "CSV a XML");
+
                     // Creamos el archivo XML utilizando XmlWriter
                     XmlWriterSettings settings = new XmlWriterSettings();
-                    settings.Indent = true; // como generar el xml formateado (https://learn.microsoft.com/en-us/dotnet/api/system.xml.xmlwritersettings.indent?view=net-10.0)
+                    settings.Indent = true;
 
                     int contTotalPeliculas = 0;
 
                     using (XmlWriter writer = XmlWriter.Create(rutaDestino, settings))
                     {
-
                         writer.WriteStartDocument();            // Escribe la cabecera: xml version...
                         writer.WriteStartElement("Peliculas"); // Abre el elemento raíz principal: <Peliculas>
 
@@ -231,17 +236,21 @@ namespace ScriptCSVToXML
 
                             writer.WriteEndElement(); // Cierra el Nodo </Pelicula>
                             contTotalPeliculas++;
+
+                            // LOG ELEMENTO
+                            logger.LogElemento(title, genre, premiere, runtime, imdbScore, language);
                         }
 
                         writer.WriteEndElement(); // Cierra el elemento raíz principal: </Peliculas>
                         writer.WriteEndDocument(); // Cierra el documento XML
-                    } // No hace falta Writer.Close(); el bloque using llama a Dispose() automáticamente al terminar y cierra el archivo.
+                    }
 
-                    Console.WriteLine($"\n--> [ÉXITO] Archivo XML generado en: '{rutaDestino}' (Total peliculas: {contTotalPeliculas})");
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, contTotalPeliculas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a XML: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a XML: {ex.Message}");
                 }
             }
             else
@@ -257,18 +266,20 @@ namespace ScriptCSVToXML
 
                     if (listaPeliculas.Count == 0)
                     {
-                        Console.WriteLine("\n[AVISO] El archivo XML no contiene elementos '<Pelicula>' para exportar.");
+                        logger.LogAviso("El archivo XML no contiene elementos '<Pelicula>' para exportar.");
                         return;
                     }
 
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, "Sin filtro (Documento completo)", "XML a CSV");
+
                     int contTotalPeliculas = 0;
 
-                    //Uso el StrimWriter para escribir el fichero CSV
+                    //Uso el StreamWriter para escribir el fichero CSV
                     using (StreamWriter sw = new StreamWriter(rutaDestino))
                     {
                         //Coloco la columna original del CSV
                         sw.WriteLine("Title,Genre,Premiere,Runtime,IMDB Score,Language");
-
 
                         foreach (XmlNode pelicula in listaPeliculas)
                         {
@@ -279,20 +290,25 @@ namespace ScriptCSVToXML
                             string imdbScore = pelicula["IMDB_Score"]?.InnerText ?? "";
                             string language = pelicula["Language"]?.InnerText ?? "";
 
-                            // Formateamos el title y el premiere entre comillas porque hay en algunos casos que continen comas
+                            // Formateamos el title y el premiere entre comillas porque hay en algunos casos que contienen comas
                             string titleFormateado = title.Contains(",") ? $"\"{title}\"" : title;
                             string premiereFormateado = premiere.Contains(",") ? $"\"{premiere}\"" : premiere;
 
                             // Escribimos la línea separada por comas en el archivo CSV
                             sw.WriteLine($"{titleFormateado},{genre},{premiereFormateado},{runtime},{imdbScore},{language}");
                             contTotalPeliculas++;
+
+                            // LOG ELEMENTO
+                            logger.LogElemento(title, genre, premiere, runtime, imdbScore, language);
                         }
                     }
-                    Console.WriteLine($"\n--> [ÉXITO] Archivo CSV generado en: '{rutaDestino}' (Total peliculas: {contTotalPeliculas})");
+
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, contTotalPeliculas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a CSV: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a CSV: {ex.Message}");
                 }
             }
         }
@@ -308,7 +324,6 @@ namespace ScriptCSVToXML
                     string[] lineas = File.ReadAllLines(rutaOrigen);
                     for (int i = 1; i < lineas.Length; i++)
                     {
-                        // Parsea la línea respetando posibles comas dentro de comillas
                         List<string> campos = ParseCsvLine(lineas[i]);
 
                         if (campos.Count >= 2)
@@ -339,12 +354,11 @@ namespace ScriptCSVToXML
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"\n[ERROR] Ocurrió un error al obtener los géneros: {ex.Message}");
+                logger.LogError($"Ocurrió un error al obtener los géneros: {ex.Message}");
             }
 
             generos.Sort(); //Ordeno la lista de generos
             return generos;
-
         }
 
         static void ExportarPorGenero(string origenFormato, string rutaOrigen, string rutaDestino)
@@ -353,7 +367,7 @@ namespace ScriptCSVToXML
 
             if (generos.Count == 0)
             {
-                Console.WriteLine("\n[AVISO] No se encontraron generos para exportar. ");
+                logger.LogAviso("No se encontraron géneros para exportar.");
                 return;
             }
 
@@ -361,7 +375,7 @@ namespace ScriptCSVToXML
             Console.WriteLine("\n=== SELECCIONE EL GÉNERO A EXPORTAR ===");
             for (int i = 0; i < generos.Count; i++)
             {
-                Console.WriteLine($"{i + 1} {generos[i]}");
+                Console.WriteLine($"{i + 1}. {generos[i]}");
             }
 
             int opcion = 0;
@@ -398,8 +412,11 @@ namespace ScriptCSVToXML
                 {
                     string[] lineas = File.ReadAllLines(rutaOrigen);
 
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, $"Género: {generoElegido}", "CSV a XML");
+
                     XmlWriterSettings settings = new XmlWriterSettings();
-                    settings.Indent = true; // como generar el xml formateado (https://learn.microsoft.com/en-us/dotnet/api/system.xml.xmlwritersettings.indent?view=net-10.0)
+                    settings.Indent = true;
 
                     int contTotalPeliculas = 0;
 
@@ -410,7 +427,6 @@ namespace ScriptCSVToXML
 
                         for (int i = 1; i < lineas.Length; i++)
                         {
-                            // Parsea la línea respetando posibles comas dentro de comillas
                             List<string> campos = ParseCsvLine(lineas[i]);
                             if (campos.Count < 6) continue;
 
@@ -444,6 +460,9 @@ namespace ScriptCSVToXML
 
                                 xmlWriter.WriteEndElement(); // Cierra </Pelicula>
                                 contTotalPeliculas++;
+
+                                // LOG ELEMENTO
+                                logger.LogElemento(campos[0], campos[1], campos[2], campos[3], campos[4], campos[5]);
                             }
                         }
 
@@ -451,11 +470,12 @@ namespace ScriptCSVToXML
                         xmlWriter.WriteEndDocument();
                     }
 
-                    Console.WriteLine($"\n--> [ÉXITO] Se han exportado {contTotalPeliculas} películas del género '{generoElegido}' a '{rutaDestino}'.");
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, contTotalPeliculas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a XML: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a XML: {ex.Message}");
                 }
             }
             else
@@ -464,14 +484,17 @@ namespace ScriptCSVToXML
                 try
                 {
                     XmlDocument xmlDoc = new XmlDocument();
-                    xmlDoc.Load(rutaOrigen); // Carga del XML con XmlDocument
+                    xmlDoc.Load(rutaOrigen);
+
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, $"Género: {generoElegido}", "XML a CSV");
 
                     XmlNodeList listaPeliculas = xmlDoc.GetElementsByTagName("Pelicula");
+                    int contTotalPeliculas = 0;
 
                     using (StreamWriter sw = new StreamWriter(rutaDestino))
                     {
                         sw.WriteLine("Title,Genre,Premiere,Runtime,IMDB Score,Language");
-                        int contTotalPeliculas = 0;
 
                         foreach (XmlNode pelicula in listaPeliculas)
                         {
@@ -489,16 +512,19 @@ namespace ScriptCSVToXML
 
                                 sw.WriteLine($"{titleFormateado},{genre},{premiereFormateado},{runtime},{imdbScore},{language}");
                                 contTotalPeliculas++;
+
+                                // LOG ELEMENTO
+                                logger.LogElemento(title, genre, premiere, runtime, imdbScore, language);
                             }
                         }
-
-                        Console.WriteLine($"\n--> [ÉXITO] Se han exportado {contTotalPeliculas} películas del género '{generoElegido}' a '{rutaDestino}'.");
                     }
 
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, contTotalPeliculas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a CSV: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a CSV: {ex.Message}");
                 }
             }
         }
@@ -511,17 +537,13 @@ namespace ScriptCSVToXML
                 return 0;
             }
 
-            //Parto la fecha por los espacios 
             string[] partes = fecha.Trim().Split(' ');
-
-            // Obtenemos la última palabra (donde está el año)
             string ultimoElemento = partes[partes.Length - 1];
 
             try
             {
                 int ano = int.Parse(ultimoElemento);
                 return ano;
-
             }
             catch
             {
@@ -540,7 +562,6 @@ namespace ScriptCSVToXML
             {
                 Console.Write("\nIngrese el año a partir del cual desea exportar: ");
                 string entrada = Console.ReadLine()!.Trim();
-
 
                 try
                 {
@@ -568,6 +589,9 @@ namespace ScriptCSVToXML
                 {
                     string[] lineas = File.ReadAllLines(rutaOrigen);
 
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, $"Año >= {anoLimite}", "CSV a XML");
+
                     XmlWriterSettings settings = new XmlWriterSettings();
                     settings.Indent = true;
 
@@ -578,18 +602,14 @@ namespace ScriptCSVToXML
                         xmlWriter.WriteStartDocument();
                         xmlWriter.WriteStartElement("Peliculas");
 
-
                         for (int i = 1; i < lineas.Length; i++)
                         {
-                            // Parsea la línea respetando posibles comas dentro de comillas
                             List<string> campos = ParseCsvLine(lineas[i]);
-
                             if (campos.Count < 6) continue;
 
                             string fecha = campos[2];
                             int anoPelicula = ExtraerAno(fecha);
 
-                            // Comprobamos si el año de la película es mayor o igual al año mínimo requerido 
                             if (anoPelicula >= anoLimite)
                             {
                                 xmlWriter.WriteStartElement("Pelicula");
@@ -620,17 +640,21 @@ namespace ScriptCSVToXML
 
                                 xmlWriter.WriteEndElement();
                                 totalPeliculasExportadas++;
+
+                                // LOG ELEMENTO
+                                logger.LogElemento(campos[0], campos[1], campos[2], campos[3], campos[4], campos[5]);
                             }
                         }
                         xmlWriter.WriteEndElement();
                         xmlWriter.WriteEndDocument();
                     }
 
-                    Console.WriteLine($"\n--> [ÉXITO] Se han exportado {totalPeliculasExportadas} películas estrenadas en {anoLimite} o posteriormente a '{rutaDestino}'.");
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, totalPeliculasExportadas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a XML: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a XML: {ex.Message}");
                 }
             }
             else
@@ -639,20 +663,21 @@ namespace ScriptCSVToXML
                 try
                 {
                     XmlDocument xmlDoc = new XmlDocument();
-                    xmlDoc.Load(rutaOrigen); // Carga del XML con XmlDocument
+                    xmlDoc.Load(rutaOrigen);
+
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, $"Año >= {anoLimite}", "XML a CSV");
 
                     XmlNodeList listaNodosPelicula = xmlDoc.GetElementsByTagName("Pelicula");
-
                     int totalPeliculasExportadas = 0;
 
                     using (StreamWriter sw = new StreamWriter(rutaDestino))
                     {
                         sw.WriteLine("Title,Genre,Premiere,Runtime,IMDB Score,Language");
 
-
                         foreach (XmlNode nodoPelicula in listaNodosPelicula)
                         {
-                            string fecha = nodoPelicula["Premiere"]?.InnerText ?? ""; //Extraemos la fecha
+                            string fecha = nodoPelicula["Premiere"]?.InnerText ?? "";
                             int anoPelicula = ExtraerAno(fecha);
 
                             if (anoPelicula >= anoLimite)
@@ -668,15 +693,19 @@ namespace ScriptCSVToXML
 
                                 sw.WriteLine($"{titleFormateado},{genre},{fechaFormateada},{runtime},{imdbScore},{language}");
                                 totalPeliculasExportadas++;
+
+                                // LOG ELEMENTO
+                                logger.LogElemento(title, genre, fecha, runtime, imdbScore, language);
                             }
                         }
                     }
 
-                    Console.WriteLine($"\n--> [ÉXITO] Se han exportado {totalPeliculasExportadas} películas estrenadas en {anoLimite} o posteriormente a '{rutaDestino}'.");
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, totalPeliculasExportadas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a CSV: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a CSV: {ex.Message}");
                 }
             }
         }
@@ -692,7 +721,6 @@ namespace ScriptCSVToXML
                     string[] lineas = File.ReadAllLines(rutaOrigen);
                     for (int i = 1; i < lineas.Length; i++)
                     {
-                        // Parsea la línea respetando posibles comas dentro de comillas
                         List<string> campos = ParseCsvLine(lineas[i]);
 
                         if (campos.Count >= 6)
@@ -720,11 +748,10 @@ namespace ScriptCSVToXML
                         }
                     }
                 }
-
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"\n[ERROR] Ocurrió un fallo al obtener los idiomas: {ex.Message}");
+                logger.LogError($"Ocurrió un fallo al obtener los idiomas: {ex.Message}");
             }
 
             idiomas.Sort(); //ordeno la lista de idiomas alfabeticamente
@@ -737,7 +764,7 @@ namespace ScriptCSVToXML
 
             if (idiomas.Count == 0)
             {
-                Console.WriteLine("\n[AVISO] No se encontraron idiomas para exportar");
+                logger.LogAviso("No se encontraron idiomas para exportar.");
                 return;
             }
 
@@ -751,7 +778,6 @@ namespace ScriptCSVToXML
             int opcion = 0;
             bool numeroValido = false;
 
-            //Hago un bucle while para que elija la opcion correcta y si se equivocara para que no se salga de ese menu (hasta que ponga un numero valido)
             while (!numeroValido)
             {
                 Console.Write("Seleccione un numero de la lista: ");
@@ -783,8 +809,11 @@ namespace ScriptCSVToXML
                 {
                     string[] lineas = File.ReadAllLines(rutaOrigen);
 
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, $"Idioma: {idiomaElegido}", "CSV a XML");
+
                     XmlWriterSettings settings = new XmlWriterSettings();
-                    settings.Indent = true; // como generar el xml formateado (https://learn.microsoft.com/en-us/dotnet/api/system.xml.xmlwritersettings.indent?view=net-10.0)
+                    settings.Indent = true;
 
                     int totalPeliculasExportadas = 0;
 
@@ -793,12 +822,9 @@ namespace ScriptCSVToXML
                         xmlWriter.WriteStartDocument();
                         xmlWriter.WriteStartElement("Peliculas");
 
-
                         for (int i = 1; i < lineas.Length; i++)
                         {
-                            // Parsea la línea respetando posibles comas dentro de comillas
                             List<string> campos = ParseCsvLine(lineas[i]);
-
                             if (campos.Count < 6) continue;
 
                             string idiomaPelicula = campos[5].Trim();
@@ -833,6 +859,9 @@ namespace ScriptCSVToXML
 
                                 xmlWriter.WriteEndElement(); // Cierra </Pelicula>
                                 totalPeliculasExportadas++;
+
+                                // LOG ELEMENTO
+                                logger.LogElemento(campos[0], campos[1], campos[2], campos[3], campos[4], campos[5]);
                             }
                         }
 
@@ -840,11 +869,12 @@ namespace ScriptCSVToXML
                         xmlWriter.WriteEndDocument();
                     }
 
-                    Console.WriteLine($"\n--> [ÉXITO] Se han exportado {totalPeliculasExportadas} películas en idioma '{idiomaElegido}' a '{rutaDestino}'.");
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, totalPeliculasExportadas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a XML: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a XML: {ex.Message}");
                 }
             }
             else
@@ -853,16 +883,17 @@ namespace ScriptCSVToXML
                 try
                 {
                     XmlDocument xmlDoc = new XmlDocument();
-                    xmlDoc.Load(rutaOrigen); //Carga con XmlDocument
+                    xmlDoc.Load(rutaOrigen);
+
+                    // LOG INICIO
+                    logger.LogInicio(rutaOrigen, rutaDestino, $"Idioma: {idiomaElegido}", "XML a CSV");
 
                     XmlNodeList listaNodosPelicula = xmlDoc.GetElementsByTagName("Pelicula");
-
                     int contPeliculasExportadas = 0;
 
                     using (StreamWriter sw = new StreamWriter(rutaDestino))
                     {
                         sw.WriteLine("Title,Genre,Premiere,Runtime,IMDB Score,Language");
-                        
 
                         foreach (XmlNode nodoPelicula in listaNodosPelicula)
                         {
@@ -881,19 +912,21 @@ namespace ScriptCSVToXML
 
                                 sw.WriteLine($"{titleFormateado},{genre},{premiereFormateado},{runtime},{imdbScore},{language}");
                                 contPeliculasExportadas++;
+
+                                // LOG ELEMENTO
+                                logger.LogElemento(title, genre, premiere, runtime, imdbScore, language);
                             }
                         }
                     }
-                    
-                    Console.WriteLine($"\n--> [EXITO] Se han exportado {contPeliculasExportadas} películas en idioma '{idiomaElegido}' a '{rutaDestino}'.");
+
+                    // LOG FIN
+                    logger.LogFin(rutaDestino, contPeliculasExportadas);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"\n[ERROR] Ocurrió un fallo al exportar a CSV: {ex.Message}");
+                    logger.LogError($"Ocurrió un fallo al exportar a CSV: {ex.Message}");
                 }
             }
         }
     }
 }
-
-
